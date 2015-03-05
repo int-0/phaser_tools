@@ -1,0 +1,33 @@
+#!/bin/sh
+
+CWD=`pwd`
+echo "Running Phaser project in '$CWD'..."
+
+if [ -z "$1" ]; then
+    if [ ! -f $CWD/index.html ]; then
+	echo "Initial page does not exists!"
+	echo
+	echo "Create a 'index.html' file in '$CWD'"
+	echo "and try again."
+	exit 1
+    fi
+    DOC="index.html"
+else
+    DOC=$1
+fi
+
+echo "Main file: $CWD/$DOC"
+if [ ! -f $CWD/$DOC ]; then
+    echo "File '$DOC' not found in '$CWD'!"
+    exit 1
+fi
+
+python -m SimpleHTTPServer 8000 &
+HTTPD_PID=$!
+echo "HTTP server started (PID=$HTTPD_PID)"
+echo "Running project..."
+firefox -P phaser_demo -no-remote -new-window http://127.0.0.1:8000/$DOC
+echo "Stopping server..."
+kill -TERM $HTTPD_PID
+echo "Done."
+exit 0
