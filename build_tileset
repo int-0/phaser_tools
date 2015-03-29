@@ -1,0 +1,166 @@
+#!/usr/bin/env python
+
+import sys
+import math
+import glob
+import os.path
+import argparse
+
+# Require python image library
+import Image
+
+def parse_command_line():
+    parser = argparse.ArgumentParser(
+        description='Tool to create a sprite tilesets.')
+    parser.add_argument('-s', '--set-size',
+                        help='Create tile map with given size in tiles',
+                        default=None,
+                        metavar='WxH',
+                        dest='size')
+    parser.add_argument('-t', '--set-tile-size',
+                        help='Use constant tile size in pixels',
+                        default=None,
+                        metavar='WxH',
+                        dest='tile_size')
+    parser.add_argument('-o', '--output',
+                        help='Generates output image with given name',
+                        default=None,
+                        action='store',
+                        dest='out_file')
+    parser.add_argument(nargs='+',                      
+                        help='Image files',
+                        dest='in_file', action='store')
+    args = parser.parse_args()
+
+    # Check options
+    if args.size is not None:
+        if 'x' not in args.size:
+            print 'ERROR: invalis size "%s"' % args.size
+            print '       Size is in format WxH, example: 10x5'
+            sys.exit(-1)
+    if args.tile_size is not None:
+        if 'x' not in args.tile_size:
+            print 'ERROR: invalis size "%s"' % args.tile_size
+            print '       Size is in format WxH, example: 10x5'
+            sys.exit(-1)
+            
+    # Check input files
+    for file_name in args.in_file:
+        if not os.path.exists(file_name):
+            print 'ERROR: missing input file: %s' % file_name
+            sys.exit(-1)            
+    return args
+
+
+class TileMap(object):
+    def __init__(self, input_files):
+        self.__tiles = []
+        for tile in input_files:
+            self.__tiles.append(Image.open(tile))
+        self.__map_size = self.auto_size
+        self.__tile_size = self.constant_tile_size
+        
+    @property
+    def tiles(self):
+        return self.__tiles
+
+    @property
+    def size(self):
+        return self.__map_size
+    
+    @property
+    def auto_size(self):
+        y = int(math.sqrt(len(self.tiles)))
+        x = int(math.ceil((float(len(self.tiles)) / float(y))))
+        return (x, y)
+
+    def set_size(self, size):
+        self.__map_size = size
+
+    @property
+    def tile_size(self):
+        return self.__tile_size
+    
+    @property
+    def constant_tile_size(self):
+        w = max(image.size[0] for image in self.tiles)
+        h = max(image.size[1] for image in self.tiles)
+        return (w, h)
+
+    def set_tile_size(self, size):
+        self.__tile_size = size
+
+    @property
+    def mode(self):
+        if 'RGBA' in [image.mode for image in self.tiles]:
+            return 'RGBA'
+        elif 'RGB' in [image.mode for image in self.tiles]:
+            return 'RGB'
+        else:
+            print 'WARNING: unknown image modes: %s' % [image.mode for image in self.tiles]
+            return [image.mode for image in self.tiles][0]
+
+    @property
+    def map_resolution(self):
+        return (self.size[0] * self.tile_size[0],
+                self.size[1] * self.tile_size[1])
+
+    @property
+    def out_image(self):
+        image = Image.new(self.mode, self.map_resolution, None)
+        for y in range(self.size[1]):
+            for x in range(self.size[0]):
+                tile_no = (self.size[0] * y) + x
+                if tile_no not in range(len(self.tiles)):
+                    continue
+                tile = self.tiles[tile_no]
+                pos = (x * self.tile_size[0],
+                       y * self.tile_size[1])
+                # Center into the cell
+                offset = [0, 0]
+                if tile.size[0] < self.tile_size[0]:
+                    offset[0] = int(float(self.tile_size[0] - tile.size[0]) / 2.0)
+                if tile.size[1] < self.tile_size[1]:
+                    offset[1] = int(float(self.tile_size[1] - tile.size[1]) / 2.0)
+                image.paste(tile, (pos[0] + offset[0], pos[1] + offset[1]))
+        return image
+
+    def save(self, file_name):
+        self.out_image.save(file_name)
+
+
+def main():
+    args = parse_command_line()
+    tilemapper = TileMap(args.in_file)
+
+    if args.size:
+        size = (int(args.size.split('x')[0]),
+                int(args.size.split('x')[1]))
+        print 'User request tile map size: (%s x %s)' %  size
+        if (size[0] * size[1]) < len(tilemapper.images):
+            print 'ERROR: image set does not fit in given array'
+            print '       User array size: %s tiles' % (size[0] * size[1])
+            sys.exit(-1)
+        tilemapper.set_size(size)        
+    else:
+        print 'Tile map size: (%s x %s)' % tilemapper.size
+
+    if args.tile_size:
+        tile_size = (int(args.tile_size.split('x')[0]),
+                     int(args.tile_size.split('x')[1]))
+        print 'User request tile size: (%s x %s)' % tile_size
+        if ((tilemapper.constant_tile_size[0] > tile_size[0]) or
+            (tilemapper.constant_tile_size[1] > tile_size[1])):
+            print 'WARNING: some tiles will be croped!'
+            print '         Increase tile size to avoid this warning.'
+        tilemapper.set_tile_size(tile_size)
+    else:
+        print 'Tile size: (%s x %s)' % tilemapper.tile_size
+
+    print 'Image mode: %s' % tilemapper.mode
+    if args.out_file is None:
+        tilemapper.out_image.show()
+    else:
+        tilemapper.save(args.out_file)
+if __name__ == '__main__':
+    main()
