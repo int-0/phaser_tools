@@ -12,13 +12,39 @@ import subprocess
 import BaseHTTPServer
 from SimpleHTTPServer import SimpleHTTPRequestHandler
 
+HTML5_BROWSER='firefox'
+
+def get_browser_config():
+    compatible_options = []
+    try:
+        out = subprocess.check_output([HTML5_BROWSER, '--help'])
+    except (subprocess.CalledProcessError, OSError):
+        print 'Cannot found "%s" installed on your system!' % HTML5_BROWSER
+        sys.exit(-1)
+
+    for line in out.splitlines():
+        line = line.strip()
+        if line.startswith('-P'):
+            compatible_options.append('-P')
+            compatible_options.append('phaser_demo')
+        if line.startswith('-new-instance'):
+            compatible_options.append('-new-instance')
+        if line.startswith('-no-remote'):
+            compatible_options.append('-no-remote')
+        if line.startswith('-new-window'):
+            compatible_options.append('-new-window')
+
+    return compatible_options
+
+    
 def get_free_port():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(('127.0.0.1', 0))
     port = sock.getsockname()[1]
     sock.close()
     return port
-    
+
+
 def create_http_server(port):
     server = BaseHTTPServer.HTTPServer(('127.0.0.1', port),
                                        SimpleHTTPRequestHandler)
@@ -40,13 +66,16 @@ parser.add_argument(action='store',
                     metavar='html_file', dest='html')
 args = parser.parse_args()
 
+# Get firefox configuration
+browser_options = get_browser_config()
+
 CWD = os.getcwd()
 print "Running Phaser project in '%s'..." % CWD
 
 DOC = args.html
 
 if not os.path.exists(os.path.join(CWD, DOC)):
-    print "Error iniail page does not exists!"
+    print "Error initial page does not exists!"
     print
     print "Create a 'index.html' file in '%s'" % CWD
     print "and try again."
@@ -64,10 +93,7 @@ PROJ_URL='http://127.0.0.1:%s/%s' % (port, DOC)
 print 'Running project at %s' % PROJ_URL
 
 # Run project in navigator #
-cmd_line = [
-    'firefox',
-    '-P', 'phaser_demo',
-    '-new-instance', '-no-remote', '-new-window']
+cmd_line = [HTML5_BROWSER] + browser_options
 if args.show_console:
     cmd_line.append('-jsconsole')
 cmd_line.append(PROJ_URL)
