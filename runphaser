@@ -1,33 +1,83 @@
-#!/bin/sh
+#!/usr/bin/env python
 
-CWD=`pwd`
-echo "Running Phaser project in '$CWD'..."
+import os
+import sys
+import socket
+import urllib2
+import os.path
+import argparse
+import threading
+import subprocess
 
-if [ -z "$1" ]; then
-    if [ ! -f $CWD/index.html ]; then
-	echo "Initial page does not exists!"
-	echo
-	echo "Create a 'index.html' file in '$CWD'"
-	echo "and try again."
-	exit 1
-    fi
-    DOC="index.html"
-else
-    DOC=$1
-fi
+import BaseHTTPServer
+from SimpleHTTPServer import SimpleHTTPRequestHandler
 
-echo "Main file: $CWD/$DOC"
-if [ ! -f $CWD/$DOC ]; then
-    echo "File '$DOC' not found in '$CWD'!"
-    exit 1
-fi
+def get_free_port():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('127.0.0.1', 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+    
+def create_http_server(port):
+    server = BaseHTTPServer.HTTPServer(('127.0.0.1', port),
+                                       SimpleHTTPRequestHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    return server, thread
+    
 
-python -m SimpleHTTPServer 8000 &
-HTTPD_PID=$!
-echo "HTTP server started (PID=$HTTPD_PID)"
-echo "Running project..."
-firefox -P phaser_demo -no-remote -new-window http://127.0.0.1:8000/$DOC
-echo "Stopping server..."
-kill -TERM $HTTPD_PID
-echo "Done."
-exit 0
+# Parse command line arguments #
+parser = argparse.ArgumentParser(
+    description='Tool to launch Phaser projects locally.')
+parser.add_argument('-c', '--console',
+                    help='Show JS console',
+                    dest='show_console', action='store_true')
+parser.add_argument(action='store',
+                    nargs='?',
+                    default='index.html',
+                    help='Initial HTML page',
+                    metavar='html_file', dest='html')
+args = parser.parse_args()
+
+CWD = os.getcwd()
+print "Running Phaser project in '%s'..." % CWD
+
+DOC = args.html
+
+if not os.path.exists(os.path.join(CWD, DOC)):
+    print "Error iniail page does not exists!"
+    print
+    print "Create a 'index.html' file in '%s'" % CWD
+    print "and try again."
+    sys.exit(-1)
+    
+print 'Main file: %s' % os.path.join(CWD, DOC)
+
+# Create micro HTTP server #
+port = get_free_port()
+print 'HTTP server started on port %s' % port
+server, thread = create_http_server(port)
+
+PROJ_URL='http://127.0.0.1:%s/%s' % (port, DOC)
+
+print 'Running project at %s' % PROJ_URL
+
+# Run project in navigator #
+cmd_line = [
+    'firefox',
+    '-P', 'phaser_demo',
+    '-new-instance', '-no-remote', '-new-window']
+if args.show_console:
+    cmd_line.append('-jsconsole')
+cmd_line.append(PROJ_URL)
+err = subprocess.call(cmd_line)
+if err != 0:
+    print 'WARNING: browser exists with error code "%s"' % err
+
+# Stop all #
+print "Stopping server...",
+server.shutdown()
+thread.join()
+print "done."
+sys.exit(0)
