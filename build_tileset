@@ -17,11 +17,11 @@ def parse_command_line():
                         default=None,
                         metavar='WxH',
                         dest='size')
-    parser.add_argument('-t', '--set-tile-size',
-                        help='Use constant tile size in pixels',
+    parser.add_argument('-c', '--set-cell-size',
+                        help='Use constant cell size in pixels',
                         default=None,
                         metavar='WxH',
-                        dest='tile_size')
+                        dest='cell_size')
     parser.add_argument('-o', '--output',
                         help='Generates output image with given name',
                         default=None,
@@ -38,10 +38,10 @@ def parse_command_line():
             print 'ERROR: invalis size "%s"' % args.size
             print '       Size is in format WxH, example: 10x5'
             sys.exit(-1)
-    if args.tile_size is not None:
-        if 'x' not in args.tile_size:
-            print 'ERROR: invalis size "%s"' % args.tile_size
-            print '       Size is in format WxH, example: 10x5'
+    if args.cell_size is not None:
+        if 'x' not in args.cell_size:
+            print 'ERROR: invalis size "%s"' % args.cell_size
+            print '       Size is in format WxH, example: 54x60'
             sys.exit(-1)
             
     # Check input files
@@ -58,7 +58,7 @@ class TileMap(object):
         for tile in input_files:
             self.__tiles.append(Image.open(tile))
         self.__map_size = self.auto_size
-        self.__tile_size = self.constant_tile_size
+        self.__cell_size = self.auto_cell_size
         
     @property
     def tiles(self):
@@ -78,17 +78,17 @@ class TileMap(object):
         self.__map_size = size
 
     @property
-    def tile_size(self):
-        return self.__tile_size
+    def cell_size(self):
+        return self.__cell_size
     
     @property
-    def constant_tile_size(self):
+    def auto_cell_size(self):
         w = max(image.size[0] for image in self.tiles)
         h = max(image.size[1] for image in self.tiles)
         return (w, h)
 
-    def set_tile_size(self, size):
-        self.__tile_size = size
+    def set_cell_size(self, size):
+        self.__cell_size = size
 
     @property
     def mode(self):
@@ -102,8 +102,8 @@ class TileMap(object):
 
     @property
     def map_resolution(self):
-        return (self.size[0] * self.tile_size[0],
-                self.size[1] * self.tile_size[1])
+        return (self.size[0] * self.cell_size[0],
+                self.size[1] * self.cell_size[1])
 
     @property
     def out_image(self):
@@ -114,14 +114,14 @@ class TileMap(object):
                 if tile_no not in range(len(self.tiles)):
                     continue
                 tile = self.tiles[tile_no]
-                pos = (x * self.tile_size[0],
-                       y * self.tile_size[1])
+                pos = (x * self.cell_size[0],
+                       y * self.cell_size[1])
                 # Center into the cell
                 offset = [0, 0]
-                if tile.size[0] < self.tile_size[0]:
-                    offset[0] = int(float(self.tile_size[0] - tile.size[0]) / 2.0)
-                if tile.size[1] < self.tile_size[1]:
-                    offset[1] = int(float(self.tile_size[1] - tile.size[1]) / 2.0)
+                if tile.size[0] < self.cell_size[0]:
+                    offset[0] = int(float(self.cell_size[0] - tile.size[0]) / 2.0)
+                if tile.size[1] < self.cell_size[1]:
+                    offset[1] = int(float(self.cell_size[1] - tile.size[1]) / 2.0)
                 image.paste(tile, (pos[0] + offset[0], pos[1] + offset[1]))
         return image
 
@@ -137,25 +137,26 @@ def main():
         size = (int(args.size.split('x')[0]),
                 int(args.size.split('x')[1]))
         print 'User request tile map size: (%s x %s)' %  size
-        if (size[0] * size[1]) < len(tilemapper.images):
+        if (size[0] * size[1]) < len(tilemapper.tiles):
             print 'ERROR: image set does not fit in given array'
-            print '       User array size: %s tiles' % (size[0] * size[1])
+            print '       User array size: %s tiles, input tiles: %s' % ((size[0] * size[1]),
+                                                                         len(tilemapper.tiles))
             sys.exit(-1)
         tilemapper.set_size(size)        
     else:
         print 'Tile map size: (%s x %s)' % tilemapper.size
 
-    if args.tile_size:
-        tile_size = (int(args.tile_size.split('x')[0]),
-                     int(args.tile_size.split('x')[1]))
-        print 'User request tile size: (%s x %s)' % tile_size
-        if ((tilemapper.constant_tile_size[0] > tile_size[0]) or
-            (tilemapper.constant_tile_size[1] > tile_size[1])):
+    if args.cell_size:
+        cell_size = (int(args.cell_size.split('x')[0]),
+                     int(args.cell_size.split('x')[1]))
+        print 'User request cell size: (%s x %s)' % cell_size
+        if ((tilemapper.auto_cell_size[0] > cell_size[0]) or
+            (tilemapper.auto_cell_size[1] > cell_size[1])):
             print 'WARNING: some tiles will be croped!'
-            print '         Increase tile size to avoid this warning.'
-        tilemapper.set_tile_size(tile_size)
+            print '         Increase cell size to avoid this warning.'
+        tilemapper.set_cell_size(cell_size)
     else:
-        print 'Tile size: (%s x %s)' % tilemapper.tile_size
+        print 'Cell size: (%s x %s)' % tilemapper.cell_size
 
     print 'Image mode: %s' % tilemapper.mode
     if args.out_file is None:
