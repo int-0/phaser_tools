@@ -27,6 +27,12 @@ def parse_command_line():
                         default=None,
                         action='store',
                         dest='out_file')
+    parser.add_argument('-r', '--resize',
+                        help='Resize each tile to a given resolution or a recommended one',
+                        default=None,
+                        action='store',
+                        metavar='WxH|auto',
+                        dest='tile_resolution')
     parser.add_argument(nargs='+',                      
                         help='Image files',
                         dest='in_file', action='store')
@@ -35,15 +41,20 @@ def parse_command_line():
     # Check options
     if args.size is not None:
         if 'x' not in args.size:
-            print 'ERROR: invalis size "%s"' % args.size
+            print 'ERROR: invalid size "%s"' % args.size
             print '       Size is in format WxH, example: 10x5'
             sys.exit(-1)
     if args.cell_size is not None:
         if 'x' not in args.cell_size:
-            print 'ERROR: invalis size "%s"' % args.cell_size
+            print 'ERROR: invalid size "%s"' % args.cell_size
             print '       Size is in format WxH, example: 54x60'
             sys.exit(-1)
-            
+    if args.tile_resolution is not None:
+        if ('x' not in args.tile_resolution) and (args.tile_resolution != 'auto'):
+            print 'ERROR: invalid size "%s"' % args.tile_resolution
+            print '       Resolution is in format WxH or "auto", example: 45x30'
+            sys.exit(-1)
+                        
     # Check input files
     for file_name in args.in_file:
         if not os.path.exists(file_name):
@@ -83,13 +94,25 @@ class TileMap(object):
     
     @property
     def auto_cell_size(self):
-        w = max(image.size[0] for image in self.tiles)
-        h = max(image.size[1] for image in self.tiles)
+        w = max([image.size[0] for image in self.tiles])
+        h = max([image.size[1] for image in self.tiles])
         return (w, h)
 
     def set_cell_size(self, size):
         self.__cell_size = size
 
+    @property
+    def auto_tile_resolution(self):
+        w = int(math.pow(round(math.sqrt(self.auto_cell_size[0]), 0), 2))
+        h = int(math.pow(round(math.sqrt(self.auto_cell_size[1]), 0), 2))
+        return (w, h)
+
+    def resize_tiles(self, resolution):
+        resized_tiles = []
+        for tile in self.tiles:
+            resized_tiles.append(tile.resize(resolution, Image.ANTIALIAS))
+        self.__tiles = resized_tiles
+                
     @property
     def mode(self):
         if 'RGBA' in [image.mode for image in self.tiles]:
@@ -157,6 +180,22 @@ def main():
         tilemapper.set_cell_size(cell_size)
     else:
         print 'Cell size: (%s x %s)' % tilemapper.cell_size
+
+    if args.tile_resolution:
+        if args.tile_resolution == 'auto':
+            print 'Tile resolution(auto): (%s x %s)' % tilemapper.auto_tile_resolution
+            resolution = tilemapper.auto_tile_resolution
+        else:
+            resolution = (int(args.tile_resolution.split('x')[0]),
+                          int(args.tile_resolution.split('x')[1]))
+            print 'User request tile resolution: (%s x %s)' %  resolution
+        tilemapper.resize_tiles(resolution)
+        if not args.cell_size:
+            tilemapper.set_cell_size(resolution)
+        else:
+            if args.cell_size != resolution:
+                print 'WARNING: resized tiles do not fit in the cell size (crop occurs)'
+                print '         Remove -c option or select a bigger cell size'
 
     print 'Image mode: %s' % tilemapper.mode
     if args.out_file is None:
